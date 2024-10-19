@@ -4,9 +4,11 @@ import br.com.dio.persistence.EmployeeAuditDAO;
 import br.com.dio.persistence.EmployeeParamDAO;
 import br.com.dio.persistence.entity.EmployeeEntity;
 import org.flywaydb.core.Flyway;
+import org.springframework.cglib.core.Local;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Locale;
 
 
 public class Main {
@@ -14,6 +16,8 @@ public class Main {
     private final static EmployeeParamDAO employeeDAO = new EmployeeParamDAO();
 
     private final  static EmployeeAuditDAO employeeAuditDAO = new EmployeeAuditDAO();
+
+    private final static Faker faker = new Faker(Locale.of("pt", "BR"));
 
     public static void main(String[] args) {
 
