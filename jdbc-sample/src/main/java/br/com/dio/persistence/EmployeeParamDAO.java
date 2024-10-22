@@ -1,7 +1,10 @@
 package br.com.dio.persistence;
 
+import br.com.dio.persistence.entity.ContactEntity;
 import br.com.dio.persistence.entity.EmployeeEntity;
+import br.com.dio.persistence.entity.ModuleEntity;
 import com.mysql.cj.jdbc.StatementImpl;
+
 
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -14,6 +17,10 @@ import static java.time.ZoneOffset.UTC;
 import static java.util.TimeZone.LONG;
 
 public class EmployeeParamDAO {
+
+    private final ContactDAO contactDAO = new ContactDAO();
+
+    private final AccessDAO accessDAO = new AccessDAO();
 
     public void insert(final EmployeeEntity entity){
         try(
@@ -30,6 +37,9 @@ public class EmployeeParamDAO {
                     statement.executeUpdate();
                     if (statement instanceof StatementImpl impl)
                         entity.setId(impl.getLastInsertID());
+                    entity.getModules().stream()
+                            .map(ModuleEntity::getId)
+                            .forEach(m -> accessDAO.insert(entity.getId(), m));
         } catch (SQLException ex) {
             ex.printStackTrace();
         }
@@ -60,13 +70,16 @@ public class EmployeeParamDAO {
             var sql = "INSERT INTO employees (name, salary, birthday) values(?, ?, ?);";
             try (var statement = connection.prepareStatement(sql)) {
                 connection.setAutoCommit(false);
-                for (var entity : entities) {
-                    statement.setString(1, entity.getName());
-                    statement.setBigDecimal(2, entity.getSalary());
-                    var timestamp = Timestamp.valueOf(entity.getBirthday().atZoneSimilarLocal(UTC)
+                for (int i = 0; i < entities.size(); i++) {
+                    statement.setString(1, entities.get(i).getName());
+                    statement.setBigDecimal(2, entities.get(i).getSalary());
+                    var timestamp = Timestamp.valueOf(entities.get(i).getBirthday().atZoneSimilarLocal(UTC)
                             .toLocalDateTime());
                     statement.setTimestamp(3, timestamp);
+                    statement.addBatch();
+                    if (i % 500 == 0 || i == entities.size()-1) statement.executeBatch();
                 }
+                connection.commit();
             } catch (SQLException ex) {
                 connection.rollback();
                 ex.printStackTrace();
@@ -128,6 +141,7 @@ public class EmployeeParamDAO {
                 entity.setSalary(resultSet.getBigDecimal("salary"));
                 var birthdayInstant = resultSet.getTimestamp("birthday").toInstant();
                 entity.setBirthday(OffsetDateTime.ofInstant(birthdayInstant, UTC));
+                entity.setContacts(contactDAO.findByEmployeeId(resultSet.getLong("id")));
                 entities.add(entity);
             }
 
@@ -139,21 +153,38 @@ public class EmployeeParamDAO {
 
     public EmployeeEntity findById(final long id){
         var entity = new EmployeeEntity();
+        var sql = "SELECT  e.id employee_id,\n" +
+                "\t\te.name,\n" +
+                "        e.salary,\n" +
+                "        e.birthday,\n" +
+                "        c.id contact_id,\n" +
+                "        c.description,\n" +
+                "        c.type\n" +
+                "\tFROM employees e \n" +
+                "    LEFT JOIN contacts c\n" +
+                "\t\tON c.employee_id = e.id \n" +
+                " WHERE e.id = ?";
         try(
                 var connection = ConnectionUtil.getConnection();
-                var statement = connection.prepareStatement(
-                        "SELECT * FROM employees WHERE id = ?"
-           )
+                var statement = connection.prepareStatement(sql)
         ) {
             statement.setLong(1, id);
             statement.executeQuery();
             var resultSet = statement.getResultSet();
             if (resultSet.next()){
-                entity.setId(resultSet.getLong("id"));
+                entity.setId(resultSet.getLong("employee_id"));
                 entity.setName(resultSet.getString("name"));
                 entity.setSalary(resultSet.getBigDecimal("salary"));
                 var birthdayInstant = resultSet.getTimestamp("birthday").toInstant();
                 entity.setBirthday(OffsetDateTime.ofInstant(birthdayInstant, UTC));
+                entity.setContacts(new ArrayList<>());
+                do {
+                    var contact = new ContactEntity();
+                    contact.setId(resultSet.getLong("contact_id"));
+                    contact.setDescription(resultSet.getString("description"));
+                    contact.setType(resultSet.getString("type"));
+                    entity.getContacts().add(contact);
+                } while (resultSet.next());
             }
 
         } catch (SQLException ex) {

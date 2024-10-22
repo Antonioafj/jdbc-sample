@@ -10,7 +10,7 @@
         <module name="jdbc-sample.main" />
       </profile>
     </annotationProcessing>
-    <bytecodeTargetLevel target="17">
+    <bytecodeTargetLevel target="21">
       <module name="jdbc-sample.jdbc-sample.main~1" target="17" />
       <module name="jdbc-sample.jdbc-sample.test~1" target="17" />
     </bytecodeTargetLevel>
